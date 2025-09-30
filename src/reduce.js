@@ -2,38 +2,42 @@
 
 /**
  * @param {function} callback
- * @param {*} startValue
- *
+ * @param {*} initialValue
  * @returns {*}
  */
-function reduce(callback, startValue) {
+function reduce(callback, initialValue) {
+  if (this == null) {
+    throw new TypeError('Array.prototype.reduce called on null or undefined');
+  }
+
   if (typeof callback !== 'function') {
     throw new TypeError(callback + ' is not a function');
   }
 
-  const arr = this;
-  let hasInitialValue = arguments.length > 1;
+  const arr = Object(this);
+  const len = arr.length >>> 0;
+
+  let k = 0;
   let accumulator;
-  let startIndex = 0;
 
-  if (arr.length === 0 && !hasInitialValue) {
-    throw new TypeError('Reduce of empty array with no initial value');
-  }
-
-  if (hasInitialValue) {
-    accumulator = startValue;
+  if (arguments.length > 1) {
+    accumulator = initialValue;
   } else {
-  
-    while (startIndex < arr.length && !(startIndex in arr)) {
-      startIndex++;
+    // шукаємо перший існуючий елемент
+    while (k < len && !(k in arr)) {
+      k++;
     }
-    accumulator = arr[startIndex];
-    startIndex++;
+
+    if (k >= len) {
+      throw new TypeError('Reduce of empty array with no initial value');
+    }
+
+    accumulator = arr[k++];
   }
 
-  for (let i = startIndex; i < arr.length; i++) {
-    if (i in arr) {
-      accumulator = callback(accumulator, arr[i], i, arr);
+  for (; k < len; k++) {
+    if (k in arr) {
+      accumulator = callback(accumulator, arr[k], k, arr);
     }
   }
 

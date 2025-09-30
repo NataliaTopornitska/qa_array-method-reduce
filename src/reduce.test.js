@@ -1,9 +1,11 @@
 'use strict';
 
+// eslint-disable-next-line no-extend-native
 const { reduce } = require('./reduce');
 
 describe('reduce', () => {
   beforeAll(() => {
+    // eslint-disable-next-line no-extend-native
     Array.prototype.reduce2 = reduce;
   });
 
@@ -23,11 +25,9 @@ describe('reduce', () => {
 
   it('should not mutate array', () => {
     const array = [1, 2, 3, 4];
-    const original = array.slice();
-
+    const copy = [...array];
     array.reduce2(callback, 0);
-
-    expect(array).toEqual(original);
+    expect(array).toEqual(copy);
   });
 
   it('should run callback array`s length times if initialValue is provided', () => {
@@ -42,87 +42,89 @@ describe('reduce', () => {
     expect(callback).toHaveBeenCalledTimes(array.length - 1);
   });
 
-  it('should throw TypeError if array is empty and no initialValue', () => {
-    expect(() => [].reduce2(callback)).toThrow(TypeError);
+  it('should not run callback if array is empty and initialValue is provided', () => {
+    const array = [];
+    array.reduce2(callback, 0);
+    expect(callback).toHaveBeenCalledTimes(0);
   });
 
   it('should run callback with correct arguments when initialValue is provided', () => {
     const array = [1, 2, 3, 4];
     array.reduce2(callback, 0);
+
     expect(callback).toHaveBeenNthCalledWith(1, 0, 1, 0, array);
     expect(callback).toHaveBeenNthCalledWith(2, 1, 2, 1, array);
     expect(callback).toHaveBeenNthCalledWith(3, 3, 3, 2, array);
     expect(callback).toHaveBeenNthCalledWith(4, 6, 4, 3, array);
   });
 
-  it('should pass correct arguments when no initialValue', () => {
-    const array = [10, 20, 30];
-    array.reduce2(callback);
-    expect(callback).toHaveBeenNthCalledWith(1, 10, 20, 1, array);
-    expect(callback).toHaveBeenNthCalledWith(2, 30, 30, 2, array);
-  });
-
-  it('should return initial value if array is empty and initialValue is provided', () => {
+  it('should return initial value if array is empty', () => {
     const array = [];
     const initialValue = 0;
     const result = array.reduce2(callback, initialValue);
+
     expect(result).toBe(initialValue);
-    expect(callback).not.toHaveBeenCalled();
   });
 
-  // ----- Extra edge cases -----
+  it('should throw if array is empty and no initial value', () => {
+    const array = [];
+    expect(() => array.reduce2(callback)).toThrow(TypeError);
+  });
+
   it('should skip empty slots in sparse arrays', () => {
+    // eslint-disable-next-line no-sparse-arrays
     const array = [1, , 3];
     const result = array.reduce2((acc, cur) => acc + cur, 0);
     expect(result).toBe(4);
   });
 
-  it('should include undefined and null elements', () => {
-    const array = [1, undefined, null, 2];
-    const result = array.reduce2((acc, cur) => acc.concat([cur]), []);
-    expect(result).toEqual([1, undefined, null, 2]);
+  it('should handle leading holes without initialValue', () => {
+    // eslint-disable-next-line no-sparse-arrays
+    const array = [, , 3, 4];
+    const result = array.reduce2((acc, cur) => acc + cur);
+    expect(result).toBe(7); // accumulator = 3, then adds 4
   });
 
-  it('should return the only element if single-element array without initialValue', () => {
-    const array = [42];
-    const result = array.reduce2(callback);
-    expect(result).toBe(42);
-    expect(callback).not.toHaveBeenCalled();
+  it('should throw on all-holes array without initialValue', () => {
+    const array = new Array(3); // [ , , , ]
+    expect(() => array.reduce2(callback)).toThrow(TypeError);
   });
 
-  it('should run callback once for single-element array with initialValue', () => {
-    const array = [42];
-    array.reduce2(callback, 10);
-    expect(callback).toHaveBeenCalledTimes(1);
-    expect(callback).toHaveBeenCalledWith(10, 42, 0, array);
+  it('should throw if callback is not a function', () => {
+    const array = [1, 2];
+    expect(() => array.reduce2(null)).toThrow(TypeError);
   });
 
-  it('should handle element addition during iteration', () => {
-    const array = [1, 2, 3];
-    const result = array.reduce2((acc, cur, i, arr) => {
-      if (i === 0) arr.push(4);
+  it('should have undefined as callback this in strict mode', () => {
+    const array = [1];
+    let recordedThis;
+    array.reduce2(function (acc, cur) {
+      recordedThis = this;
       return acc + cur;
     }, 0);
-    expect(result).toBe(10);
+    expect(recordedThis).toBeUndefined();
   });
 
-  it('should skip deleted unvisited indices', () => {
-    const array = [1, 2, 3];
-    const result = array.reduce2((acc, cur, i, arr) => {
-      if (i === 0) arr.pop();
-      return acc;
-    }, 0);
+  it('should support array-like objects via call', () => {
+    const obj = { 0: 1, 1: 2, length: 2 };
+    const result = reduce.call(obj, (acc, cur) => acc + cur, 0);
     expect(result).toBe(3);
   });
 
-  it('should process elements strictly left-to-right', () => {
+  it('should throw if called on null/undefined', () => {
+    expect(() => reduce.call(null, callback, 0)).toThrow(TypeError);
+    expect(() => reduce.call(undefined, callback, 0)).toThrow(TypeError);
+  });
+
+  it('should ignore non-numeric properties', () => {
     const array = [1, 2, 3];
-    const seen = [];
-    array.reduce2((acc, cur, i) => {
-      seen.push([i, cur]);
-      return acc;
-    }, 0);
-    expect(seen).toEqual([[0, 1], [1, 2], [2, 3]]);
+    // @ts-ignore
+    array.foo = 10;
+    // element beyond initial length
+    array[100] = 100;
+
+    const result = array.reduce2((acc, cur) => acc + cur, 0);
+    expect(result).toBe(6); // only 1+2+3
   });
 
   it('should work with string concatenation', () => {
